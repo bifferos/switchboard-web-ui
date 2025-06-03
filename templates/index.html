@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Control Switchboard</title>
+    <style>
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+    </style>
+    <script>
+        function toggleCheckbox(cb, name) {
+            fetch('/toggle', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'name=' + encodeURIComponent(name) + '&checked=' + cb.checked
+            }).then(response => {
+                if (!response.ok) {
+                    response.text().then(msg => alert('Error: ' + msg));
+                } else {
+                    window.location = '/';
+                }
+            }).catch(error => {
+                alert('Network error: ' + error);
+            });
+        }
+    </script>
+</head>
+<body>
+<h2>Device enabler</h2>
+<form>
+    {{range .}}
+    <label>
+        <input type="checkbox" onchange="toggleCheckbox(this, '{{.Name}}')" {{if .Checked}}checked{{end}}>
+        {{.Name}}
+    </label><br>
+    {{end}}
+</form>
+</body>
+</html>

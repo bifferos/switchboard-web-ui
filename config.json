@@ -1,0 +1,8 @@
+{
+  "templatesDir": "./templates",
+  "staticDir": "./static",
+  "widgetDir": "./widgets",
+  "stateDir": "./state",
+  "tokenDir": "./tokens",
+  "port": 6060
+}
