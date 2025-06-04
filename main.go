@@ -5,7 +5,9 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -14,7 +16,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 type Config struct {
@@ -34,7 +38,6 @@ type FileEntry struct {
 
 // some default locations
 const appName = "switchboard-web-ui"
-const controlledApp = "switchboard"
 
 var (
 	usrShareDir  = filepath.Join("/usr/share", appName)
@@ -42,10 +45,8 @@ var (
 	staticDir    = filepath.Join(usrShareDir, "static")
 	varLibDir    = filepath.Join("/var/lib", appName)
 	widgetDir    = filepath.Join(varLibDir, "widget")
+	stateDir     = filepath.Join(varLibDir, "state")
 	tokenDir     = filepath.Join(varLibDir, "tokens")
-	// This default is logically different from the web UI because
-	// it's shared with the controlled app.
-	stateDir     = filepath.Join("/var/lib/switchboard")
 )
 
 func main() {
@@ -244,6 +245,49 @@ func registerUser(cfg Config) {
 		os.Exit(1)
 	}
 
-	// Print registration URL
-	fmt.Printf("Registration URL: http://%s:6060/register?token=%s\n", cfg.ExternalIpAddress, token)
+	url := fmt.Sprintf("http://%s:6060/register?token=%s", cfg.ExternalIpAddress, token)
+	htmlPath := tokenPath + ".html"
+
+	// Check if qrencode is available
+	if _, err := exec.LookPath("qrencode"); err == nil {
+		// Generate PNG QR code to stdout
+		var pngBuf bytes.Buffer
+		cmd := exec.Command("qrencode", "-o", "-", "-t", "PNG", "-s", "8", url)
+		cmd.Stdout = &pngBuf
+		if err := cmd.Run(); err == nil {
+			// Encode PNG as base64
+			b64 := base64.StdEncoding.EncodeToString(pngBuf.Bytes())
+			html := fmt.Sprintf(`
+<html>
+  <body>
+    <h2>Registration URL</h2>
+    <p><a href="%s">%s</a></p>
+    <img src="data:image/png;base64,%s" alt="QR Code"/>
+  </body>
+</html>`, url, url, b64)
+			os.WriteFile(htmlPath, []byte(html), 0644)
+			// Open in browser
+			openBrowser(htmlPath)
+			fmt.Printf("Registration HTML with QR code written to: %s\n", htmlPath)
+			return
+		}
+	}
+
+	// Fallback: just print the URL
+	fmt.Printf("Registration URL: %s\n", url)
+}
+
+// openBrowser tries to open the given file in the default browser
+func openBrowser(path string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "linux":
+		cmd = exec.Command("xdg-open", path)
+	default:
+		fmt.Printf("Please open %s manually\n", path)
+		return
+	}
+	_ = cmd.Start()
 }
