@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 )
 
 type Config struct {
@@ -45,7 +44,7 @@ var (
 	staticDir    = filepath.Join(usrShareDir, "static")
 	varLibDir    = filepath.Join("/var/lib", appName)
 	widgetDir    = filepath.Join(varLibDir, "widget")
-	tokenDir     = filepath.Join(varLibDir, "tokens")
+	tokenDir     = filepath.Join(varLibDir, "token")
 	stateDir     = filepath.Join("/var/lib/switchboard")
 )
 
@@ -223,6 +222,13 @@ func checkAuth(w http.ResponseWriter, r *http.Request, cfg Config) bool {
 }
 
 func registerUser(cfg Config) {
+
+	if _, err := exec.LookPath("qrencode"); err != nil {
+		fmt.Println("qrencode is required for registration")
+		os.Exit(1)
+	}
+
+
 	// Generate a random 32-byte token
 	tokenBytes := make([]byte, 32)
 	_, err := rand.Read(tokenBytes)
@@ -246,18 +252,16 @@ func registerUser(cfg Config) {
 	}
 
 	url := fmt.Sprintf("http://%s:6060/register?token=%s", cfg.ExternalIpAddress, token)
-	htmlPath := tokenPath + ".html"
+	htmlPath := "register.html"
 
-	// Check if qrencode is available
-	if _, err := exec.LookPath("qrencode"); err == nil {
-		// Generate PNG QR code to stdout
-		var pngBuf bytes.Buffer
-		cmd := exec.Command("qrencode", "-o", "-", "-t", "PNG", "-s", "8", url)
-		cmd.Stdout = &pngBuf
-		if err := cmd.Run(); err == nil {
-			// Encode PNG as base64
-			b64 := base64.StdEncoding.EncodeToString(pngBuf.Bytes())
-			html := fmt.Sprintf(`
+	// Generate PNG QR code to stdout
+	var pngBuf bytes.Buffer
+	cmd := exec.Command("qrencode", "-o", "-", "-t", "PNG", "-s", "8", url)
+	cmd.Stdout = &pngBuf
+	if err := cmd.Run(); err == nil {
+		// Encode PNG as base64
+		b64 := base64.StdEncoding.EncodeToString(pngBuf.Bytes())
+		html := fmt.Sprintf(`
 <html>
   <body>
     <h2>Registration URL</h2>
@@ -265,29 +269,8 @@ func registerUser(cfg Config) {
     <img src="data:image/png;base64,%s" alt="QR Code"/>
   </body>
 </html>`, url, url, b64)
-			os.WriteFile(htmlPath, []byte(html), 0644)
-			// Open in browser
-			openBrowser(htmlPath)
-			fmt.Printf("Registration HTML with QR code written to: %s\n", htmlPath)
-			return
-		}
-	}
-
-	// Fallback: just print the URL
-	fmt.Printf("Registration URL: %s\n", url)
-}
-
-// openBrowser tries to open the given file in the default browser
-func openBrowser(path string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", path)
-	case "linux":
-		cmd = exec.Command("xdg-open", path)
-	default:
-		fmt.Printf("Please open %s manually\n", path)
+		os.WriteFile(htmlPath, []byte(html), 0644)
+		fmt.Printf("Registration HTML with QR code written to: ./%s\n", htmlPath)
 		return
 	}
-	_ = cmd.Start()
 }

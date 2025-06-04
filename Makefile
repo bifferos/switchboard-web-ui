@@ -21,13 +21,13 @@ STATIC_DST_DIR := $(USR_SHARE)/static
 VAR_LIB := /var/lib/$(APP_NAME)
 
 # Tokens for access to the site
-TOKEN_DIR := $(VAR_LIB)/tokens
+TOKEN_DIR := $(VAR_LIB)/token
 
 # The 'widgets' to be included in the UI
-WIDGET_DIR := $(VAR_LIB)/widgets
+WIDGET_DIR := $(VAR_LIB)/widget
 
-# The current state of the widgets
-STATE_DIR := $(VAR_LIB)/state
+# The current state, shared with other apps
+STATE_DIR := /var/lib/switchboard
 
 
 run: build
