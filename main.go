@@ -45,8 +45,8 @@ var (
 	staticDir    = filepath.Join(usrShareDir, "static")
 	varLibDir    = filepath.Join("/var/lib", appName)
 	widgetDir    = filepath.Join(varLibDir, "widget")
-	stateDir     = filepath.Join(varLibDir, "state")
 	tokenDir     = filepath.Join(varLibDir, "tokens")
+	stateDir     = filepath.Join("/var/lib/switchboard")
 )
 
 func main() {
