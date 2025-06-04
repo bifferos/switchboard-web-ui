@@ -66,8 +66,8 @@ build:
 	go build -o $(BINARY_NAME) main.go
 
 
-register:
-	./$(BINARY_NAME) -register
+register: build
+	./$(BINARY_NAME) -config ./config.json -register
 
 
 clean:

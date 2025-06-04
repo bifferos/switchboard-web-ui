@@ -18,13 +18,13 @@ import (
 )
 
 type Config struct {
-	TemplatesDir      string   `json:"templatesDir"`
-	StaticDir         string   `json:"staticDir"`
-	WidgetDir         string   `json:"widetDir"`
-	StateDir          string   `json:"stateDir"`
-	TokenDir          string   `json:"tokenDir"`
-	ExternalIpAddress string   `json:"externalIpAddress"`
-	Port              int      `json:"port"`
+	TemplatesDir      string `json:"templatesDir"`
+	StaticDir         string `json:"staticDir"`
+	WidgetDir         string `json:"widgetDir"`
+	StateDir          string `json:"stateDir"`
+	TokenDir          string `json:"tokenDir"`
+	ExternalIpAddress string `json:"externalIpAddress"`
+	Port              int    `json:"port"`
 }
 
 type FileEntry struct {
@@ -34,13 +34,19 @@ type FileEntry struct {
 
 // some default locations
 const appName = "switchboard-web-ui"
-const usrShareDir = path.join("/usr/share", appName)
-const templatesDir = path.join(usrShareDir, "templates")
-const staticDir = path.join(usrShareDir, "static")
-const varLibDir = path.join("/var/lib", appName)
-const widgetDir = path.join(varLibDir, "widget")
-const stateDir = path.join(varLibDir, "state")
+const controlledApp = "switchboard"
 
+var (
+	usrShareDir  = filepath.Join("/usr/share", appName)
+	templatesDir = filepath.Join(usrShareDir, "templates")
+	staticDir    = filepath.Join(usrShareDir, "static")
+	varLibDir    = filepath.Join("/var/lib", appName)
+	widgetDir    = filepath.Join(varLibDir, "widget")
+	tokenDir     = filepath.Join(varLibDir, "tokens")
+	// This default is logically different from the web UI because
+	// it's shared with the controlled app.
+	stateDir     = filepath.Join("/var/lib/switchboard")
+)
 
 func main() {
 
@@ -56,7 +62,7 @@ func main() {
 		ExternalIpAddress: externalIp,
 		Port:              6060,
 	}
-	configPath := flag.String("config", path.join("/etc", appName, "config.json"), "Path to config file")
+	configPath := flag.String("config", filepath.Join("/etc", appName, "config.json"), "Path to config file")
 	register := flag.Bool("register", false, "Register a new user")
 	flag.Parse()
 
@@ -70,6 +76,13 @@ func main() {
 		}
 	}
 	defer f.Close()
+
+	fmt.Println("Using configuration:")
+	fmt.Printf("  TemplatesDir: %s\n", cfg.TemplatesDir)
+	fmt.Printf("  StaticDir: %s\n", cfg.StaticDir)
+	fmt.Printf("  WidgetDir: %v\n", cfg.WidgetDir)
+	fmt.Printf("  StateDir: %s\n", cfg.StateDir)
+	fmt.Printf("  TokenDir: %s\n", cfg.TokenDir)
 
 	if *register {
 		fmt.Printf("Registering a new user.\n")
@@ -91,12 +104,6 @@ func main() {
 
 	http.Handle("/favicon.ico", http.FileServer(http.Dir(cfg.StaticDir)))
 
-	fmt.Println("Final configuration:")
-	fmt.Printf("  VariableList: %v\n", cfg.VariableList)
-	fmt.Printf("  TemplatesDir: %s\n", cfg.TemplatesDir)
-	fmt.Printf("  StaticDir: %s\n", cfg.StaticDir)
-	fmt.Printf("  VariableFilesDir: %s\n", cfg.VariableFilesDir)
-	fmt.Printf("  TokenFilesDir: %s\n", cfg.TokenFilesDir)
 	fmt.Printf("  Port: %d\n", cfg.Port)
 	fmt.Printf("UI running on http://localhost:%d/\n", cfg.Port)
 
@@ -111,9 +118,11 @@ func handleIndex(w http.ResponseWriter, r *http.Request, tmpl *template.Template
 		return
 	}
 
+	widgetList := listFiles(cfg.WidgetDir)
+
 	var entries []FileEntry
-	for _, name := range cfg.VariableList {
-		filePath := filepath.Join(cfg.VariableFilesDir, name)
+	for _, name := range widgetList {
+		filePath := filepath.Join(cfg.StateDir, name)
 		checked := false
 		if _, err := os.Stat(filePath); err == nil {
 			checked = true
@@ -135,12 +144,14 @@ func handleToggle(w http.ResponseWriter, r *http.Request, cfg Config) {
 	r.ParseForm()
 	name := r.FormValue("name")
 	checked := r.FormValue("checked") == "true"
-	filePath := filepath.Join(cfg.VariableFilesDir, name)
+	filePath := filepath.Join(cfg.StateDir, name)
 	if checked {
-		os.MkdirAll(cfg.VariableFilesDir, 0755)
+		os.MkdirAll(cfg.StateDir, 0755)
 		os.WriteFile(filePath, []byte("checked"), 0644)
+		fmt.Println("File created:", filePath)
 	} else {
 		os.Remove(filePath)
+		fmt.Println("File removed:", filePath)
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -151,7 +162,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request, cfg Config) {
 		http.Error(w, "Missing token", http.StatusBadRequest)
 		return
 	}
-	tokenPath := filepath.Join(cfg.TokenFilesDir, token)
+	tokenPath := filepath.Join(cfg.TokenDir, token)
 	if _, err := os.Stat(tokenPath); err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
@@ -168,6 +179,20 @@ func handleRegister(w http.ResponseWriter, r *http.Request, cfg Config) {
 	})
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func listFiles(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []string{}
+	}
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files = append(files, entry.Name())
+		}
+	}
+	return files
 }
 
 func getLocalIP() string {
@@ -188,7 +213,7 @@ func checkAuth(w http.ResponseWriter, r *http.Request, cfg Config) bool {
 		http.Error(w, "Access denied: missing or invalid auth token", http.StatusUnauthorized)
 		return false
 	}
-	tokenPath := filepath.Join(cfg.TokenFilesDir, cookie.Value)
+	tokenPath := filepath.Join(cfg.TokenDir, cookie.Value)
 	if _, err := os.Stat(tokenPath); err != nil {
 		http.Error(w, "Access denied: invalid or expired token", http.StatusUnauthorized)
 		return false
@@ -207,13 +232,13 @@ func registerUser(cfg Config) {
 	token := hex.EncodeToString(tokenBytes)
 
 	// Ensure tokenDir exists
-	if err := os.MkdirAll(cfg.TokenFilesDir, 0700); err != nil {
+	if err := os.MkdirAll(cfg.TokenDir, 0700); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create token directory: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Write token to a file named after the token
-	tokenPath := filepath.Join(cfg.TokenFilesDir, token)
+	tokenPath := filepath.Join(cfg.TokenDir, token)
 	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write token file: %v\n", err)
 		os.Exit(1)
