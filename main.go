@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -28,6 +29,11 @@ type Config struct {
 	TokenDir          string `json:"tokenDir"`
 	ExternalIpAddress string `json:"externalIpAddress"`
 	Port              int    `json:"port"`
+}
+
+type ExecutionSpec struct {
+	TrueCommand  string `json:"true"`
+	FalseCommand string `json:"false"`
 }
 
 type FileEntry struct {
@@ -98,6 +104,9 @@ func main() {
 	http.HandleFunc("/toggle", func(w http.ResponseWriter, r *http.Request) {
 		handleToggle(w, r, cfg)
 	})
+	http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
+		handleQuery(w, r, cfg)
+	})
 	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		handleRegister(w, r, cfg)
 	})
@@ -144,6 +153,54 @@ func handleToggle(w http.ResponseWriter, r *http.Request, cfg Config) {
 	r.ParseForm()
 	name := r.FormValue("name")
 	checked := r.FormValue("checked") == "true"
+
+	widgetList := listFiles(cfg.WidgetDir)
+
+	if !contains(widgetList, name) {
+		http.Error(w, fmt.Sprintf("name parameter '%s' not in widget list", name), http.StatusBadRequest)
+		return
+	}
+
+	// Load the widget, check what needs to happen.
+	widgetPath := filepath.Join(cfg.WidgetDir, name)
+	statInfo, err := os.Stat(widgetPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("widget for '%s' does not exist", name), http.StatusBadRequest)
+		return
+	}
+
+	if statInfo.Size() > 0 {
+
+		data, err := os.ReadFile(widgetPath)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Unable to open '%s'", widgetPath), http.StatusBadRequest)
+			return
+		}
+
+		var spec ExecutionSpec
+		if err := json.Unmarshal(data, &spec); err != nil {
+			http.Error(w, fmt.Sprintf("Unable to parse '%s'", widgetPath), http.StatusBadRequest)
+			return
+		}
+
+		var cmdString string
+		if checked {
+			cmdString = spec.TrueCommand
+		} else {
+			cmdString = spec.FalseCommand
+		}
+
+		args := strings.Fields(cmdString)
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to run command '%s': %v", cmdString, err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Update the state.
 	filePath := filepath.Join(cfg.StateDir, name)
 	if checked {
 		os.MkdirAll(cfg.StateDir, 0755)
@@ -153,7 +210,41 @@ func handleToggle(w http.ResponseWriter, r *http.Request, cfg Config) {
 		os.Remove(filePath)
 		fmt.Println("File removed:", filePath)
 	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func contains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+func handleQuery(w http.ResponseWriter, r *http.Request, cfg Config) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	queryName := r.URL.Query().Get("name")
+
+	widgetList := listFiles(cfg.WidgetDir)
+
+	if !contains(widgetList, queryName) {
+		http.Error(w, fmt.Sprintf("name parameter '%s' not in widget list", queryName), http.StatusBadRequest)
+		return
+	}
+
+	filePath := filepath.Join(cfg.StateDir, queryName)
+	w.Header().Set("Content-Type", "text/plain")
+	if _, err := os.Stat(filePath); err == nil {
+		w.Write([]byte("true"))
+	} else {
+		w.Write([]byte("false"))
+	}
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request, cfg Config) {
@@ -188,6 +279,9 @@ func listFiles(dir string) []string {
 	}
 	var files []string
 	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), "~") {
+			continue // Skip backup files
+		}
 		if !entry.IsDir() {
 			files = append(files, entry.Name())
 		}
@@ -227,7 +321,6 @@ func registerUser(cfg Config) {
 		fmt.Println("qrencode is required for registration")
 		os.Exit(1)
 	}
-
 
 	// Generate a random 32-byte token
 	tokenBytes := make([]byte, 32)
