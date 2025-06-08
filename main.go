@@ -116,7 +116,7 @@ func main() {
 	fmt.Printf("  Port: %d\n", cfg.Port)
 	fmt.Printf("UI running on http://localhost:%d/\n", cfg.Port)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", cfg.Port), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
 		os.Exit(1)
 	}
