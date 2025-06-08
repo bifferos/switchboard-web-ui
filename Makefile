@@ -49,6 +49,14 @@ install: build
 	@echo "Installed and started $(BINARY_NAME).service"
 
 
+info:
+	systemctl status $(SERVICE_FILE)
+	
+	
+logs:
+        journalctl -u $(SERVICE_FILE) -n 20
+
+
 uninstall:
 	sudo systemctl disable --now $(APP_NAME).service
 	sudo rm -f $(INSTALL_DIR)/$(BINARY_NAME)
