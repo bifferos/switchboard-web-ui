@@ -1,4 +1,4 @@
-.PHONY: build run clean run install uninstall install-templates
+.PHONY: build run clean run install uninstall install-templates info logs
 
 
 APP_NAME := switchboard-web-ui
