@@ -54,7 +54,7 @@ info:
 	
 	
 logs:
-        journalctl -u $(SERVICE_FILE) -n 20
+	journalctl -u $(SERVICE_FILE) -n 20
 
 
 uninstall:
