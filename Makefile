@@ -45,8 +45,8 @@ install: build
 	sudo install -d $(STATE_DIR)
 	sudo install -m 644 $(SERVICE_FILE) $(SYSTEMD_DIR)/
 	sudo systemctl daemon-reexec
-	sudo systemctl enable --now $(BINARY_NAME).service
-	@echo "Installed and started $(BINARY_NAME).service"
+	sudo systemctl enable --now $(SERVICE_FILE)
+	@echo "Installed and started $(SERVICE_FILE)"
 
 
 info:
@@ -55,6 +55,13 @@ info:
 	
 logs:
 	journalctl -u $(SERVICE_FILE) -n 20
+	
+	
+stop:
+	sudo systemctl stop $(SERVICE_FILE)
+
+start:
+	sudo systemctl start $(SERVICE_FILE)
 
 
 uninstall:
@@ -63,11 +70,10 @@ uninstall:
 	sudo rm -rf $(TEMPLATE_DST_DIR)
 	sudo rm -rf $(STATIC_DST_DIR)
 	sudo rm -rf $(TOKEN_DIR)
-	sudo rm -rf $(WIDGET_DIR)
 	sudo rm -rf $(STATE_DIR)
 	sudo rm -f $(SYSTEMD_DIR)/$(SERVICE_FILE)
 	sudo systemctl daemon-reexec
-	@echo "Uninstalled $(BINARY_NAME)"
+	@echo "Uninstalled $(SERVICE_FILE)"
 	
 
 build:

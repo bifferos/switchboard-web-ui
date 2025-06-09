@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -109,6 +110,9 @@ func main() {
 	})
 	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		handleRegister(w, r, cfg)
+	})
+	http.HandleFunc("/cookies", func(w http.ResponseWriter, r *http.Request) {
+		handleCookies(w, r)
 	})
 
 	http.Handle("/favicon.ico", http.FileServer(http.Dir(cfg.StaticDir)))
@@ -264,13 +268,25 @@ func handleRegister(w http.ResponseWriter, r *http.Request, cfg Config) {
 		Name:     "auth_token",
 		Value:    token,
 		Path:     "/",
-		HttpOnly: true,
-		Secure:   false, // Set to true if using HTTPS
-		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().AddDate(20, 0, 0),
+		MaxAge:   60 * 60 * 24 * 265 * 20,
 	})
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	// http.Redirect(w, r, "/", http.StatusSeeOther)
+	
+        w.Header().Set("Content-Type", "text/html")
+        fmt.Fprintf(w, `<html><body>Cookie set. Redirecting...<script>location="/";</script></body></html>`)
 }
+
+
+func handleCookies(w http.ResponseWriter, r *http.Request) {
+	// For debugging, in case the cookie isn't set.
+	fmt.Fprintf(w, "Cookies sent by your browser:\n\n")	
+	for _, c := range r.Cookies() {
+		fmt.Fprintf(w, "%s = %s\n", c.Name, c.Value)
+	}
+}
+
 
 func listFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
